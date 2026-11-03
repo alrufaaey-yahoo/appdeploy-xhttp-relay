@@ -1,16 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
-const { getTargetUrl, handleHealth, relay } = require('./relay');
+const { getTargetUrl, handleHealth, relay, tokenIsValid } = require('./relay');
 
-test('builds target URLs while preserving path and query', () => {
-  process.env.TARGET_DOMAIN = 'https://example.com/base';
-  assert.equal(getTargetUrl('/hello?x=1').toString(), 'https://example.com/hello?x=1');
+test('builds only the approved upstream URL while preserving path and query', () => {
+  delete process.env.TARGET_DOMAIN;
+  assert.equal(getTargetUrl('/hello?x=1').toString(), 'https://vps.thumbayan.com/hello?x=1');
 });
 
-test('rejects non-http target URLs', () => {
-  process.env.TARGET_DOMAIN = 'ftp://example.com';
-  assert.throws(() => getTargetUrl('/'), /http/);
+test('rejects non-approved target URLs and absolute-form request URLs', () => {
+  process.env.TARGET_DOMAIN = 'https://example.com';
+  assert.throws(() => getTargetUrl('/'), /vps\.thumbayan\.com/);
+  delete process.env.TARGET_DOMAIN;
+  assert.throws(() => getTargetUrl('https://attacker.example/'), /origin-form/);
 });
 
 test('responds to health checks without contacting upstream', () => {
@@ -24,21 +25,28 @@ test('responds to health checks without contacting upstream', () => {
   assert.deepEqual(JSON.parse(response.body), { status: 'ok' });
 });
 
-test('relays a request to the configured upstream', async (t) => {
-  const upstream = http.createServer((req, res) => {
-    res.setHeader('x-upstream', 'yes');
-    res.end(`${req.method} ${req.url}`);
-  });
-  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  t.after(() => upstream.close());
+test('requires a relay token and validates it in constant time', () => {
+  process.env.RELAY_TOKEN = 'test-secret';
+  assert.equal(tokenIsValid({ headers: { 'x-relay-token': 'wrong' } }), false);
+  assert.equal(tokenIsValid({ headers: { 'x-relay-token': 'test-secret' } }), true);
+  delete process.env.RELAY_TOKEN;
+});
 
-  process.env.TARGET_DOMAIN = `http://127.0.0.1:${upstream.address().port}`;
-  const relayServer = http.createServer(relay);
-  await new Promise((resolve) => relayServer.listen(0, '127.0.0.1', resolve));
-  t.after(() => relayServer.close());
-
-  const response = await fetch(`http://127.0.0.1:${relayServer.address().port}/probe?ok=1`, { method: 'POST' });
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get('x-upstream'), 'yes');
-  assert.equal(await response.text(), 'POST /probe?ok=1');
+test('rejects unauthenticated relay requests before contacting upstream', () => {
+  const response = {
+    headersSent: false,
+    setHeader() {},
+    end(body) { this.body = body; },
+  };
+  const request = {
+    url: '/',
+    headers: {},
+    socket: { remoteAddress: '127.0.0.1' },
+    on() { return this; },
+    pipe() { throw new Error('upstream should not be contacted'); },
+  };
+  process.env.RELAY_TOKEN = 'test-secret';
+  relay(request, response);
+  assert.equal(response.statusCode, 401);
+  delete process.env.RELAY_TOKEN;
 });
