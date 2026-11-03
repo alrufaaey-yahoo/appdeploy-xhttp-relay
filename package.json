@@ -1,17 +1,18 @@
 {
-  "name": "vercel-xhttp-relay",
+  "name": "appdeploy-xhttp-relay",
   "version": "1.0.0",
   "private": true,
-  "description": "A lightweight XHTTP reverse relay deployed as a Vercel Serverless Function",
-  "main": "api/index.js",
+  "description": "A portable XHTTP reverse relay for AppDeploy and Vercel",
+  "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "node --watch index.js",
     "start": "node index.js",
-    "build": "echo 'Vercel serverless function ready'"
+    "build": "node --check index.js && node --check relay.js",
+    "test": "node --test"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.18.0"
   },
-  "keywords": ["vercel", "xhttp", "relay", "reverse-proxy"],
+  "keywords": ["appdeploy", "xhttp", "relay", "reverse-proxy"],
   "license": "ISC"
 }

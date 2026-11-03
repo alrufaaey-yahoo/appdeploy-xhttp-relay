@@ -1,47 +1,52 @@
-# Vercel XHTTP Relay
+# AppDeploy XHTTP Relay
 
-ريلاي XHTTP خفيف مبني على Node.js ويعمل كـ **Vercel Serverless Function**. يمرر طلبات HTTP إلى خادمك الهدف مع تنظيف هيدرز البروكسي غير الضرورية.
+ريلاي XHTTP خفيف مبني على Node.js، ويعمل مباشرة على **AppDeploy** كخدمة ويب قياسية، مع إبقاء دعم Vercel Serverless اختياريًا. يمرر الطلبات إلى الخادم المحدد في `TARGET_DOMAIN` مع تنظيف هيدرز الـ proxy غير الضرورية.
 
-## النشر على Vercel
+## النشر على AppDeploy
 
-1. استورد مستودع `vercel-xhttp-relay` إلى Vercel.
-2. في **Project Settings → Environment Variables** أضف:
+1. اربط مستودع GitHub بهذا المشروع في AppDeploy أو اطلب من وكيلك المتصل بـ AppDeploy نشره.
+2. اضبط متغير البيئة المطلوب `TARGET_DOMAIN`، مثل `https://example.com`.
+3. اترك أمر التشغيل الافتراضي `npm start`. سيستخدم التطبيق المنفذ الذي توفره AppDeploy عبر `PORT` ويستمع على `0.0.0.0`.
+4. استخدم `/healthz` كمسار فحص الصحة إذا طلبت المنصة ذلك.
 
-   | المتغير | الوصف | القيمة الافتراضية |
-   |---|---|---|
-   | `TARGET_DOMAIN` | عنوان الخادم الهدف، مثل `https://example.com:443` | `https://vps.thumbayan.com:443` |
+يحتوي `package.json` على أوامر `build` و`test` متوافقة مع سير عمل AppDeploy، ولا يعتمد التشغيل الإنتاجي على Vercel CLI أو أي خدمة خارجية.
 
-3. نفّذ Deploy. كل الطلبات ستُمرر عبر الدالة.
+## متغيرات البيئة
 
-يمكن أيضًا النشر من الطرفية بعد تثبيت Vercel CLI:
+| المتغير | مطلوب | الوصف |
+|---|---:|---|
+| `TARGET_DOMAIN` | نعم | عنوان HTTP أو HTTPS للخادم الهدف. |
+| `PORT` | لا | يضبطه AppDeploy تلقائيًا؛ القيمة المحلية الافتراضية `3000`. |
+| `UPSTREAM_TIMEOUT_MS` | لا | مهلة طلب الخادم الهدف بالمللي ثانية، والافتراضي `55000`. |
 
-```bash
-vercel --prod
-```
+لا تضع ملف `.env` أو أي سر في Git. ابدأ من `.env.example` عند التشغيل المحلي.
 
 ## التشغيل المحلي
 
 ```bash
+cp .env.example .env
+# عدّل TARGET_DOMAIN في .env أو صدّره مباشرة
 TARGET_DOMAIN=https://example.com npm start
 ```
 
-ثم افتح `http://localhost:3000`.
+بعدها:
 
-## ملاحظات مهمة
+- `GET http://localhost:3000/healthz` يعيد `{"status":"ok"}`.
+- أي مسار آخر يمرر الطلب إلى الخادم الهدف مع الحفاظ على المسار والاستعلام والـ method والجسم.
 
-- هذا المشروع يعمل كـ reverse proxy عام إلى العنوان الموجود في `TARGET_DOMAIN`؛ احرص على ضبطه وعدم كشفه لخوادم غير موثوقة.
-- Vercel Serverless Functions ليست اتصالًا دائمًا، وقد تفرض المنصة حدًا زمنيًا على الطلبات الطويلة.
-- يتم تمرير جسم الطلب عبر stream، وتُعاد استجابة الخادم الهدف مع إزالة هيدرز الاتصال الخاصة بالبروكسي.
-- لا تضع الأسرار أو ملف `.env` في Git.
+## الاختبار والبناء
 
-## هيكل المشروع
-
-```text
-vercel-xhttp-relay/
-├── api/index.js   # نقطة دخول Vercel Serverless Function
-├── relay.js       # منطق التوجيه المشترك
-├── index.js       # مشغل محلي اختياري
-├── vercel.json    # إعدادات Vercel والتوجيه
-├── package.json
-└── README.md
+```bash
+npm test
+npm run build
 ```
+
+الاختبارات تستخدم `node:test` المدمج، لذلك لا توجد تبعيات إنتاجية أو خطوات تثبيت إضافية.
+
+## دعم Vercel الاختياري
+
+يبقى `api/index.js` و`vercel.json` متاحين للنشر على Vercel. اضبط `TARGET_DOMAIN` في إعدادات المشروع، ثم انشر بالطريقة المعتادة. أما AppDeploy فيستخدم نقطة التشغيل القياسية `index.js` و`npm start`.
+
+## ملاحظات أمنية
+
+هذا المشروع reverse proxy عام إلى العنوان الذي تضبطه في `TARGET_DOMAIN`. لا تعرضه لخوادم غير موثوقة، ولا تجعل `TARGET_DOMAIN` قيمة يدخلها المستخدم النهائي. يجب ضبط الخادم الهدف من إعدادات البيئة فقط.
